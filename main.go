@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "github.com/chromedp/cdproto/target"
     "github.com/chromedp/chromedp"
     "log"
     "path/filepath"
@@ -37,93 +38,98 @@ func main() {
         chromedp.WithLogf(log.Printf),
     )
     
-    // 执行我们自定义的任务 - myTasks函数在第4步
-    if err := chromedp.Run(ctx, myTasks()); err != nil {
+    // 启动游戏
+    if err := chromedp.Run(ctx, LaunchGame()); err != nil {
         log.Fatal(err)
         return
     }
     
-    time.Sleep(2 * time.Second)
-    targets, _ := chromedp.Targets(ctx)
-    for _, tg := range targets {
-        if strings.HasPrefix(tg.URL, "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/notification.html") {
-            newCtx, _ := chromedp.NewContext(ctx, chromedp.WithTargetID(tg.TargetID))
-            sel := `#app-content`
-            var tit string
-            var val string
-            if err := chromedp.Run(newCtx, chromedp.Tasks{
-                chromedp.ActionFunc(func(c context.Context) error {
-                  chromedp.Text(sel, &val)
-                  log.Println(22, val)
-                  return nil
-                }),
-    
-                chromedp.Text(sel, &val),
-                chromedp.Title(&tit),
-            }); err != nil {
-                log.Fatalln(err)
-            }
-            
-            log.Println(tit)
-        }
+    // 获取信息
+    if err := chromedp.Run(ctx, GetInfo()); err != nil {
+        log.Fatal(err)
+        return
     }
     
-    //chromedp.ListenTarget(ctx, func(ev interface{}) {
+    //time.Sleep(2 * time.Second)
+    //targets, _ := chromedp.Targets(ctx)
+    //for _, tg := range targets {
+    //    if strings.HasPrefix(tg.URL, "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/notification.html") {
+    //        newCtx, _ := chromedp.NewContext(ctx, chromedp.WithTargetID(tg.TargetID))
+    //        sel := `#app-content`
+    //        var tit string
+    //        var val string
+    //        if err := chromedp.Run(newCtx, chromedp.Tasks{
+    //            chromedp.Text(sel, &val),
+    //            chromedp.Title(&tit),
+    //        }); err != nil {
+    //            log.Fatalln(err)
+    //        }
     //
-    //   //if reflect.TypeOf(ev).String() != "*cdproto.Message" {
-    //   //    log.Println(reflect.TypeOf(ev))
-    //   //}
-    //
-    //   if tg, ok := ev.(*target.EventTargetInfoChanged); ok {
-    //       //t := page.HandleJavaScriptDialog(false)
-    //       log.Println(tg.TargetInfo.URL)
-    //
-    //       if strings.HasPrefix(tg.TargetInfo.URL,"chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/notification.html#connect") {
-    //           //log.Println("metamask link")
-    //           //sel := `#app-content > div > div.main-container-wrapper > div > div.permissions-connect-choose-account > div.permissions-connect-choose-account__footer-container > div.permissions-connect-choose-account__bottom-buttons > button.button.btn-primary`
-    //           //var tit string
-    //           if err := chromedp.Run(ctx, chromedp.Tasks{
-    //               chromedp.Sleep(time.Second*2),
-    //               chromedp.ActionFunc(func(c context.Context) error {
-    //                   log.Println(target.CloseTarget(tg.TargetInfo.TargetID).Do(ctx))
-    //                   return nil
-    //               }),
-    //               //chromedp.WaitVisible(sel),
-    //               //chromedp.Sleep(time.Second*2),
-    //               chromedp.ActionFunc(func(c context.Context) error {
-    //                  log.Println(33, tg.TargetInfo.Attached)
-    //                  return nil
-    //               }),
-    //               //chromedp.Reload(),
-    //               //chromedp.ActionFunc(func(c context.Context) error {
-    //               //    var val string
-    //               //    chromedp.Value(sel, &val)
-    //               //
-    //               //    log.Println(22, val, tit)
-    //               //    return nil
-    //               //}),
-    //
-    //           }); err != nil {
-    //
-    //           }
-    //       }
-    //
-    //
-    //   }
-    //})
+    //        log.Println(tit)
+    //    }
+    //}
+    
+    chromedp.ListenTarget(ctx, func(ev interface{}) {
+        
+        //if reflect.TypeOf(ev).String() != "*cdproto.Message" {
+        //    log.Println(reflect.TypeOf(ev))
+        //}
+        
+        if tg, ok := ev.(*target.EventTargetInfoChanged); ok {
+            //t := page.HandleJavaScriptDialog(false)
+            log.Println(tg.TargetInfo.URL)
+            
+            if strings.HasPrefix(tg.TargetInfo.URL, "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/notification.html#connect") {
+                //log.Println("metamask link")
+                //sel := `#app-content > div > div.main-container-wrapper > div > div.permissions-connect-choose-account > div.permissions-connect-choose-account__footer-container > div.permissions-connect-choose-account__bottom-buttons > button.button.btn-primary`
+                //var tit string
+                var tit string
+                var text string
+                
+                newCtx, _ := chromedp.NewContext(ctx, chromedp.WithTargetID(tg.TargetInfo.TargetID))
+                if err := chromedp.Run(newCtx, chromedp.Tasks{
+                    //chromedp.Title(&tit),
+                    chromedp.WaitVisible(`//button[text()='下一步']`),
+                    chromedp.Click(`//button[text()='下一步']`, chromedp.BySearch),
+                }); err != nil {
+                
+                }
+                
+                log.Println(22, tit, text)
+            }
+            
+        }
+    })
     
     select {}
     cancel()
 }
 
-// 自定义任务
-func myTasks() chromedp.Tasks {
+// LaunchGame 启动游戏
+func LaunchGame() chromedp.Tasks {
     return chromedp.Tasks{
         chromedp.Navigate("chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html"),
         chromedp.WaitVisible(`#password`),
         chromedp.SendKeys(`#password`, "11111111"),
         chromedp.Sleep(time.Second),
         chromedp.Click(`#app-content > div > div.main-container-wrapper > div > div > button`, chromedp.ByID),
-        chromedp.Navigate("https://v2.qkswap.io/"),
+        chromedp.Navigate("https://game.playvalkyr.io/fighters"),
+        chromedp.WaitVisible(`#app > div.warning > div > button.el-button.el-button--block.el-button--success.el-button--large`),
+        chromedp.Click(`#app > div.warning > div > button.el-button.el-button--block.el-button--success.el-button--large`, chromedp.ByQuery),
+    }
+}
+
+func GetInfo() chromedp.Tasks {
+    var inSP string
+    var fullSP string
+    var perSP string
+    return chromedp.Tasks{chromedp.WaitVisible(`#characters`),
+        chromedp.Text(`#characters > div.stamina-info > p.mt-0 > span:nth-child(2)`, &inSP),
+        chromedp.Text(`#characters > div.stamina-info > p:nth-child(2) > span:nth-child(2)`, &fullSP),
+        chromedp.Text(`#characters > div.stamina-info > p.mb-0 > span:nth-child(2)`, &perSP),
+        chromedp.ActionFunc(func(ctx context.Context) error {
+            log.Println(inSP, fullSP, perSP)
+            return nil
+        }),
     }
 }
