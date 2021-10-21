@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "fmt"
     "github.com/chromedp/cdproto/cdp"
     "github.com/chromedp/cdproto/target"
     "github.com/chromedp/chromedp"
@@ -10,6 +11,8 @@ import (
     "strings"
     "time"
 )
+
+var nodes []*cdp.Node
 
 func main() {
     // industry fence famous level unknown hungry about chief divide wait critic hockey
@@ -49,6 +52,15 @@ func main() {
     if err := chromedp.Run(ctx, GetInfo()); err != nil {
         log.Fatal(err)
         return
+    }
+    
+    for i, _ := range nodes {
+    
+        // 获取信息
+        if err := chromedp.Run(ctx, GetNodeInfo(i)); err != nil {
+            log.Fatal(err)
+            return
+        }
     }
     
     //time.Sleep(2 * time.Second)
@@ -121,21 +133,19 @@ func LaunchGame() chromedp.Tasks {
 }
 
 func GetInfo() chromedp.Tasks {
-    var inSP string
-    var fullSP string
-    var perSP string
-    var nodes []*cdp.Node
     return chromedp.Tasks{chromedp.WaitVisible(`#characters`),
-        chromedp.Text(`#characters > div.stamina-info > p.mt-0 > span:nth-child(2)`, &inSP),
-        chromedp.Text(`#characters > div.stamina-info > p:nth-child(2) > span:nth-child(2)`, &fullSP),
-        chromedp.Text(`#characters > div.stamina-info > p.mb-0 > span:nth-child(2)`, &perSP),
         chromedp.Nodes(`#characters div.character-info`, &nodes, chromedp.BySearch),
-        chromedp.ActionFunc(func(ctx context.Context) error {
-            log.Println(inSP, fullSP, perSP, nodes)
+    }
+}
+
+
+func GetNodeInfo(i int) chromedp.Tasks {
     
-            for _, node := range nodes {
-                log.Println(node)
-            }
+    var text string
+    return chromedp.Tasks{chromedp.WaitVisible(`#characters`),
+        chromedp.Text(fmt.Sprintf(`#characters div.character-info .level:eq(%d)`, i), &text, chromedp.BySearch),
+        chromedp.ActionFunc(func(ctx context.Context) error {
+            log.Println(text)
             return nil
         }),
     }
