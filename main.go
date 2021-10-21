@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+type Item struct {
+	XPath string
+	Title string
+}
+
+var items []Item
+
 func main() {
 	// industry fence famous level unknown hungry about chief divide wait critic hockey
 	path, _ := filepath.Abs("./data")
@@ -55,7 +62,13 @@ func main() {
 			log.Fatal(err)
 			return
 		}
-		log.Println(11111)
+		//time.Sleep(1* time.Second)
+		if err := chromedp.Run(ctx, chromedp.Click(items[0].XPath)); err != nil {
+			log.Fatal(err)
+			return
+		}
+
+		log.Println(items)
 		time.Sleep(time.Second * 5)
 	}
 
@@ -130,11 +143,11 @@ func LaunchGame() chromedp.Tasks {
 
 func GetInfo() chromedp.Tasks {
 	var nodes []*cdp.Node
-
+	//var nodeId []cdp.NodeID
 	return chromedp.Tasks{
 		chromedp.Navigate("https://v2ex.com/"),
 		chromedp.WaitVisible(`#Main`),
-		chromedp.Nodes(`#Main .item`, &nodes, chromedp.BySearch),
+		chromedp.Nodes(`#Main .item_title`, &nodes, chromedp.BySearch),
 		chromedp.ActionFunc(func(c context.Context) error {
 
 			for i, node := range nodes {
@@ -150,7 +163,11 @@ func GetInfo() chromedp.Tasks {
 					continue
 				}
 
-				log.Println(i, doc.Find(`.item_title`).Text(), err)
+				items = append(items, Item{
+					XPath: node.FullXPath(),
+					Title: doc.Find(`.topic-link`).Text(),
+				})
+				log.Println(i, node.FullXPathByID(), doc.Find(`.topic-link`).Text())
 			}
 
 			return nil
