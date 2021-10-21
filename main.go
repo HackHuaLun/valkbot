@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "github.com/chromedp/cdproto/cdp"
     "github.com/chromedp/cdproto/target"
     "github.com/chromedp/chromedp"
     "log"
@@ -123,12 +124,18 @@ func GetInfo() chromedp.Tasks {
     var inSP string
     var fullSP string
     var perSP string
+    var nodes []*cdp.Node
     return chromedp.Tasks{chromedp.WaitVisible(`#characters`),
         chromedp.Text(`#characters > div.stamina-info > p.mt-0 > span:nth-child(2)`, &inSP),
         chromedp.Text(`#characters > div.stamina-info > p:nth-child(2) > span:nth-child(2)`, &fullSP),
         chromedp.Text(`#characters > div.stamina-info > p.mb-0 > span:nth-child(2)`, &perSP),
+        chromedp.Nodes(`#characters div.character-info`, &nodes, chromedp.BySearch),
         chromedp.ActionFunc(func(ctx context.Context) error {
-            log.Println(inSP, fullSP, perSP)
+            log.Println(inSP, fullSP, perSP, nodes)
+    
+            for _, node := range nodes {
+                log.Println(node)
+            }
             return nil
         }),
     }
