@@ -10,13 +10,17 @@ import (
 	"github.com/chromedp/chromedp"
 	"log"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 type Item struct {
 	XPath string
-	Title string
+	Id string
+	Lv string
+	CP int
+	SP int
 }
 
 var items []Item
@@ -41,7 +45,6 @@ func main() {
 		)...,
 	)
 
-	// 创建新的chromedp上下文对象，超时时间的设置不分先后
 	// 注意第二个返回的参数是cancel()
 	ctx, cancel := chromedp.NewContext(
 		ctx,
@@ -50,46 +53,40 @@ func main() {
 	)
 
 	// 启动游戏
-	//if err := chromedp.Run(ctx, LaunchGame()); err != nil {
-	//    log.Fatal(err)
-	//    return
-	//}
-
-	// 获取信息
-	for {
-
-		if err := chromedp.Run(ctx, GetInfo()); err != nil {
-			log.Fatal(err)
-			return
+	if err := chromedp.Run(ctx, LaunchGame()); err != nil {
+	   log.Fatal(err)
+	   return
+	}
+	
+	go func(c context.Context) {
+		// 获取信息
+		for {
+			log.Println("刷新信息:")
+			if err := chromedp.Run(c, GetInfo()); err != nil {
+				log.Fatal(err)
+				return
+			}
+			
+			for _, item := range items {
+				log.Println(fmt.Sprintf("%s, CP: %d, SP: %d", item.Lv, item.CP, item.SP))
+			}
+			
+			time.Sleep(time.Second * 5)
 		}
-		//time.Sleep(1* time.Second)
-		if err := chromedp.Run(ctx, chromedp.Click(items[0].XPath)); err != nil {
-			log.Fatal(err)
-			return
-		}
+	}(ctx)
+	
+	time.Sleep(time.Second * 1)
+	item := items[1]
 
-		log.Println(items)
-		time.Sleep(time.Second * 5)
+	if err := chromedp.Run(ctx, SelectHero(item.Id)); err != nil {
+		log.Fatal(err)
+		return
 	}
 
-	//time.Sleep(2 * time.Second)
-	//targets, _ := chromedp.Targets(ctx)
-	//for _, tg := range targets {
-	//    if strings.HasPrefix(tg.URL, "chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/notification.html") {
-	//        newCtx, _ := chromedp.NewContext(ctx, chromedp.WithTargetID(tg.TargetID))
-	//        sel := `#app-content`
-	//        var tit string
-	//        var val string
-	//        if err := chromedp.Run(newCtx, chromedp.Tasks{
-	//            chromedp.Text(sel, &val),
-	//            chromedp.Title(&tit),
-	//        }); err != nil {
-	//            log.Fatalln(err)
-	//        }
-	//
-	//        log.Println(tit)
-	//    }
-	//}
+	if err := chromedp.Run(ctx, Attach(item.Id)); err != nil {
+		log.Fatal(err)
+		return
+	}
 
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 
@@ -136,21 +133,20 @@ func LaunchGame() chromedp.Tasks {
 		chromedp.Sleep(time.Second),
 		chromedp.Click(`#app-content > div > div.main-container-wrapper > div > div > button`, chromedp.ByID),
 		chromedp.Navigate("https://game.playvalkyr.io/fighters"),
-		chromedp.WaitVisible(`#app > div.warning > div > button.el-button.el-button--block.el-button--success.el-button--large`),
-		chromedp.Click(`#app > div.warning > div > button.el-button.el-button--block.el-button--success.el-button--large`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#app > div.warning`),
+		chromedp.Click(`#app div.warning button.el-button.el-button--block.el-button--success.el-button--large`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#characters`),
 	}
 }
 
 func GetInfo() chromedp.Tasks {
 	var nodes []*cdp.Node
-	//var nodeId []cdp.NodeID
 	return chromedp.Tasks{
-		chromedp.Navigate("https://v2ex.com/"),
-		chromedp.WaitVisible(`#Main`),
-		chromedp.Nodes(`#Main .item_title`, &nodes, chromedp.BySearch),
+		chromedp.Nodes(`#characters .el-tabs__item`, &nodes, chromedp.BySearch),
 		chromedp.ActionFunc(func(c context.Context) error {
 
-			for i, node := range nodes {
+			for _, node := range nodes {
+				
 				html, err := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(c)
 				if err != nil {
 					log.Println(err)
@@ -163,11 +159,25 @@ func GetInfo() chromedp.Tasks {
 					continue
 				}
 
-				items = append(items, Item{
-					XPath: node.FullXPath(),
-					Title: doc.Find(`.topic-link`).Text(),
-				})
-				log.Println(i, node.FullXPathByID(), doc.Find(`.topic-link`).Text())
+				cp := doc.Find(`.cp`).Text()
+				cp = strings.ReplaceAll(cp, "CP:", "")
+				cp = strings.ReplaceAll(cp, ",", "")
+				cp = strings.TrimSpace(cp)
+				cpInt,_ := strconv.Atoi(cp)
+				
+				sp := doc.Find(`.pool .el-progress__text`).Text()
+				sp = strings.Split(sp, "/")[0]
+				spInt,_ := strconv.Atoi(sp)
+				
+				if cpInt > 0 {
+					items = append(items, Item{
+						XPath: node.FullXPath(),
+						Id: node.AttributeValue("aria-controls"),
+						Lv:    doc.Find(`.level`).Text(),
+						CP:    cpInt,
+						SP:    spInt,
+					})
+				}
 			}
 
 			return nil
@@ -175,14 +185,19 @@ func GetInfo() chromedp.Tasks {
 	}
 }
 
-func GetNodeInfo(i int) chromedp.Tasks {
-
-	var text string
-	return chromedp.Tasks{chromedp.WaitVisible(`#characters`),
-		chromedp.Text(fmt.Sprintf(`#characters div.character-info .level:eq(%d)`, i), &text, chromedp.BySearch),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			log.Println(text)
-			return nil
-		}),
+// SelectHero 选择英雄
+func SelectHero(id string) chromedp.Tasks {
+	sel := fmt.Sprintf(`#characters div[aria-controls=%s] div.character-info`, id)
+	return chromedp.Tasks{
+		chromedp.Click(sel, chromedp.ByID),
 	}
 }
+
+// Attach 攻击
+func Attach(id string) chromedp.Tasks {
+	sel := fmt.Sprintf(`#characters div[id=%s] div.text-xl.cp > button`, id)
+	return chromedp.Tasks{
+		chromedp.Click(sel, chromedp.ByID),
+	}
+}
+
