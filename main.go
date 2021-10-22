@@ -23,7 +23,16 @@ type Item struct {
 	SP int
 }
 
+
+type Account struct {
+	XPath string
+	Name string
+	Amount string
+}
+
 var items []Item
+var accounts []Account
+var accountLoading bool
 
 func main() {
 	// industry fence famous level unknown hungry about chief divide wait critic hockey
@@ -52,15 +61,27 @@ func main() {
 		chromedp.WithLogf(log.Printf),
 	)
 
-	// 启动游戏
-	if err := chromedp.Run(ctx, LaunchGame()); err != nil {
-	   log.Fatal(err)
-	   return
+	// 加载账户
+	if err := chromedp.Run(ctx, Home()); err != nil {
+		log.Fatal(err)
+		return
 	}
+	
+	for _, account := range accounts {
+		log.Println(fmt.Sprintf("账户: %s, 余额: %s", account.Name, account.Amount))
+	}
+
+	// 默认1账户
+	ChangeAccount(ctx, accounts[1])
 	
 	go func(c context.Context) {
 		// 获取信息
 		for {
+			time.Sleep(time.Second * 3)
+			if accountLoading {
+				continue
+			}
+
 			log.Println("刷新信息:")
 			if err := chromedp.Run(c, GetInfo()); err != nil {
 				log.Fatal(err)
@@ -71,9 +92,12 @@ func main() {
 				log.Println(fmt.Sprintf("%s, CP: %d, SP: %d", item.Lv, item.CP, item.SP))
 			}
 			
-			time.Sleep(time.Second * 5)
+			ChangeAccount(ctx, accounts[0])
 		}
 	}(ctx)
+	
+	
+	select {}
 	
 	time.Sleep(time.Second * 1)
 	item := items[1]
@@ -127,11 +151,6 @@ func main() {
 // LaunchGame 启动游戏
 func LaunchGame() chromedp.Tasks {
 	return chromedp.Tasks{
-		chromedp.Navigate("chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html"),
-		chromedp.WaitVisible(`#password`),
-		chromedp.SendKeys(`#password`, "11111111"),
-		chromedp.Sleep(time.Second),
-		chromedp.Click(`#app-content > div > div.main-container-wrapper > div > div > button`, chromedp.ByID),
 		chromedp.Navigate("https://game.playvalkyr.io/fighters"),
 		chromedp.WaitVisible(`#app > div.warning`),
 		chromedp.Click(`#app div.warning button.el-button.el-button--block.el-button--success.el-button--large`, chromedp.ByQuery),
@@ -201,3 +220,70 @@ func Attach(id string) chromedp.Tasks {
 	}
 }
 
+func Home() chromedp.Tasks {
+	var nodes []*cdp.Node
+	return chromedp.Tasks{
+		chromedp.Sleep(time.Second),
+		chromedp.Navigate("chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html"),
+		chromedp.Sleep(time.Second),
+		chromedp.WaitNotPresent(`#app-content .loading-overlay`),
+		chromedp.SendKeys(`#password`, "11111111"),
+		chromedp.Click(`#app-content > div > div.main-container-wrapper > div > div > button`, chromedp.ByID),
+		
+		chromedp.WaitVisible(`#app-content div.account-menu__icon`, chromedp.ByID),
+		chromedp.Click(`#app-content div.account-menu__icon`, chromedp.ByID),
+		
+		chromedp.WaitVisible(`.account-menu`),
+		chromedp.Nodes(`.account-menu .account-menu__account`, &nodes, chromedp.BySearch),
+		
+		chromedp.ActionFunc(func(c context.Context) error {
+			
+			for _, node := range nodes {
+				html, err := dom.GetOuterHTML().WithNodeID(node.NodeID).Do(c)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				
+				doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				
+				name := doc.Find(`.account-menu__name`).Text()
+				amount := doc.Find(`.currency-display-component__text`).Text()
+				
+				accounts = append(accounts, Account{
+					XPath:  node.FullXPath(),
+					Name:   name,
+					Amount: amount,
+				})
+			}
+			
+			return nil
+		}),
+	}
+}
+
+// ChangeAccount 攻击
+func ChangeAccount(c context.Context, account Account) {
+	accountLoading = true
+	log.Println("选择账户: "+ account.Name)
+	
+	if err := chromedp.Run(c, chromedp.Tasks{
+		chromedp.Navigate("chrome-extension://nkbihfbeogaeaoehlefnkodbefgpgknn/home.html"),
+		chromedp.WaitVisible(`#app-content div.account-menu__icon`, chromedp.ByID),
+		chromedp.Click(`#app-content div.account-menu__icon`, chromedp.ByID),
+		chromedp.WaitVisible(`.account-menu`),
+		chromedp.Click(account.XPath),
+		LaunchGame(),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			accountLoading = false
+			return nil
+		}),
+	}); err != nil {
+		log.Fatal(err)
+		return
+	}
+}
